@@ -19,6 +19,7 @@ from utils.eval import accuracy, Evaluation
 from utils.logger import Logger
 from utils.random_seed import worker_init_fn
 from utils.combine_conv_bn import fuse_module
+from utils.separate_bn_paras import apply_weight_decay
 
 
 class NetTrain:
@@ -175,7 +176,7 @@ class NetTrain:
         # self.evaluation.eval_rerank()
 
     def train(self, epoches=10, save_flag=True, finetune=False):
-        if self.use_cuda:
+        if len(self.gpu_list) > 1:
             self.backbone = torch.nn.DataParallel(self.backbone, device_ids=self.gpu_list)
             self.head = torch.nn.DataParallel(self.head, device_ids=self.gpu_list)
             cudnn.benchmark = True
@@ -208,7 +209,7 @@ class NetTrain:
                 self.save_model(False, False)
             self.epoch += 1
         torch.cuda.empty_cache()
-        # self.writer.close()
+        self.writer.close()
         print("Finished training.")
 
     def search_learn_rate(self):
@@ -242,13 +243,13 @@ class NetTrain:
                     self.accuracy_top_1.avg, self.accuracy_top_5.avg,
                     self.total_losses_meter.val, self.total_losses_meter.avg)
                 for index, criterion_name in enumerate(self.criterions.keys()): 
-                    print_infos = print_infos + f", {criterion_name}_loss: {self.loss_meter[index].val:>.4f}" \
+                    print_infos = print_infos + f", {criterion_name}: {self.loss_meter[index].val:>.4f}" \
                                                 f"({self.loss_meter[index].avg:>.4f})"
                 print(print_infos)
                 self.writer.add_scalar('loss/loss', self.total_losses_meter.val, step)
                 self.writer.add_scalar('loss/total_loss', self.total_losses_meter.val, step)
                 for index, criterion_name in enumerate(self.criterions.keys()): 
-                    self.writer.add_scalar(f'loss/{criterion_name}_loss', self.loss_meter[index].val,
+                    self.writer.add_scalar(f'loss/{criterion_name}', self.loss_meter[index].val,
                                            step)
                 self.writer.add_scalar('acc/acc_top1', self.accuracy_top_1.val, step)
                 self.writer.add_scalar('acc/acc_top5', self.accuracy_top_5.val, step)
@@ -279,7 +280,7 @@ class NetTrain:
                     self.accuracy_top_1.avg, self.accuracy_top_5.avg,
                     self.total_losses_meter.val, self.total_losses_meter.avg)
                 for index, criterion_name in enumerate(self.criterions.keys()): 
-                    print_infos = print_infos + f", {criterion_name}_loss: {self.loss_meter[index].val:>.4f}" \
+                    print_infos = print_infos + f", {criterion_name}: {self.loss_meter[index].val:>.4f}" \
                                                 f"({self.loss_meter[index].avg:>.4f})"
                 print(print_infos)
             if step % 100 == 0:
@@ -292,7 +293,7 @@ class NetTrain:
                                               step + self.epoch * train_data_batch)
                 self.writer.add_scalar('loss/total_loss', self.total_losses_meter.val, step + self.epoch * train_data_batch)
                 for index, criterion_name in enumerate(self.criterions.keys()): 
-                    self.writer.add_scalar(f'loss/{criterion_name}_loss', self.loss_meter[index].val,
+                    self.writer.add_scalar(f'loss/{criterion_name}', self.loss_meter[index].val,
                                            step + self.epoch * train_data_batch)
                 self.writer.add_scalar('acc/acc_top1', self.accuracy_top_1.val, step + self.epoch * train_data_batch)
                 self.writer.add_scalar('acc/acc_top5', self.accuracy_top_5.val, step + self.epoch * train_data_batch)
@@ -340,6 +341,8 @@ class NetTrain:
         if backward:
             self.optimizer.zero_grad()
             total_loss.backward()
+            apply_weight_decay(self.backbone)
+            apply_weight_decay(self.head)
             self.optimizer.step()
         
         losses_value = []
@@ -401,18 +404,18 @@ if __name__ == '__main__':
     train_dataset = init_database(Cfg.Database.name, Cfg.Database.image_root, Cfg.Database.pickle_folder)
     val_dataset = init_database(Cfg.Database.name, Cfg.Database.val_image_root, Cfg.Database.val_pickle_folder,
                                 phase="test")
+
     train_data_loader = data.DataLoader(dataset=train_dataset,
                                         batch_size=Cfg.Sample.batch_size,
                                         shuffle=False,
                                         num_workers=Cfg.Sample.num_workers,
                                         worker_init_fn=worker_init_fn,
                                         drop_last=True)
-    criterion_xent = init_loss(name='FocalLoss')
-    criterions = {
-        "xent": criterion_xent
-        }
-    loss_weights = torch.as_tensor([1.0])
-    backbone = init_backbone(name=args.backbone_name, input_size=[112, 112])
+    criterions = {}
+    for loss_name in Cfg.Loss.list:
+        criterions.update({loss_name, init_loss(loss_name)})
+    loss_weights = torch.as_tensor(Cfg.Loss.weight_list)
+    backbone = init_backbone(name=args.backbone_name, input_size=Cfg.Database.image_size )
     head = init_head(name=args.head_name, )
     if args.finetune:
         base_params = list(map(id, backbone.parameters()))

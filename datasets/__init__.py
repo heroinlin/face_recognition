@@ -2,7 +2,7 @@ from .MS_Celeb_1M import MSCeleb
 
 __data_factory = {
     # image classification models
-    'Mms_celeb': MSCeleb,
+    'Ms_celeb': MSCeleb,
     'default': MSCeleb,
 }
 

@@ -1,73 +1,57 @@
-import torch
+import sys
 
-configurations = {
-    1: dict(
-        SEED=1337,  # random seed for reproduce results
+from yacs.config import CfgNode as CN
 
-        DATA_ROOT='/media/pc/6T/jasonjzhao/data/faces_emore',
-        # the parent root where your train/val/test data are stored
-        MODEL_ROOT='/media/pc/6T/jasonjzhao/buffer/model',  # the root to buffer your checkpoints
-        LOG_ROOT='/media/pc/6T/jasonjzhao/buffer/log',  # the root to log your train/val status
-        BACKBONE_RESUME_ROOT='./',  # the root to resume training from a saved checkpoint
-        HEAD_RESUME_ROOT='./',  # the root to resume training from a saved checkpoint
 
-        BACKBONE_NAME='IR_SE_50',
-        # support: ['ResNet_50', 'ResNet_101', 'ResNet_152', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
-        HEAD_NAME='ArcFace',  # support:  ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
-        LOSS_NAME='Focal',  # support: ['Focal', 'Softmax']
+def get_database(name):
+    if name in ['Ms_celeb', 'default']:
+        image_root = "/mnt/data/linjian/datasets/MS-Celeb-1M"
+    else:
+        print(f"The database {name} is not exist!")
+        exit(-1)
 
-        INPUT_SIZE=[112, 112],  # support: [112, 112] and [224, 224]
-        RGB_MEAN=[0.5, 0.5, 0.5],  # for normalize inputs to [-1, 1]
-        RGB_STD=[0.5, 0.5, 0.5],
-        EMBEDDING_SIZE=512,  # feature dimension
-        BATCH_SIZE=512,
-        DROP_LAST=True,  # whether drop the last batch to ensure consistent batch_norm statistics
-        LR=0.1,  # initial LR
-        NUM_EPOCH=125,  # total epoch number (use the firt 1/25 epochs to warm up)
-        WEIGHT_DECAY=5e-4,  # do not apply to batch_norm parameters
-        MOMENTUM=0.9,
-        STAGES=[35, 65, 95],  # epoch stages to decay learning rate
+Cfg = CN()
 
-        DEVICE=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
-        MULTI_GPU=True,
-        # flag to use multiple GPUs; if you choose to train with single GPU,
-        # you should first run "export CUDA_VISILE_DEVICES=device_id" to specify the GPU card you want to use
-        GPU_ID=[0, 1, 2, 3],  # specify your GPU ids
-        PIN_MEMORY=True,
-        NUM_WORKERS=0,
-    ),
-    2: dict(
-        SEED=1337,  # random seed for reproduce results
+# 数据部分参数
+Cfg.Database = CN()
+Cfg.Database.name = 'default'
+Cfg.Database.image_size = [112, 112]
+Cfg.Database.image_root = get_database(Cfg.Database.name)
+# Cfg.Database.pickle_folder = None
 
-        DATA_ROOT='/home/linjian/dataset',
-        # the parent root where your train/val/test data are stored
-        MODEL_ROOT='checkpoints',  # the root to buffer your checkpoints
-        LOG_ROOT='log',  # the root to log your train/val status
-        BACKBONE_RESUME_ROOT='./checkpoints',  # the root to resume training from a saved checkpoint
-        HEAD_RESUME_ROOT='./checkpoints',  # the root to resume training from a saved checkpoint
 
-        BACKBONE_NAME='MobileFaceNet',
-        HEAD_NAME='ArcFace',  # support:  ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
-        LOSS_NAME='Focal',  # support: ['Focal', 'Softmax']
+# 采样部分参数
+Cfg.Sample = CN()
+Cfg.Sample.sample_batch_size = 64
+Cfg.Sample.sample_num_instance = 4
+Cfg.Sample.batch_size = 256
+Cfg.Sample.num_workers = 16
 
-        INPUT_SIZE=[112, 112],  # support: [112, 112] and [224, 224]
-        RGB_MEAN=[0.5, 0.5, 0.5],  # for normalize inputs to [-1, 1]
-        RGB_STD=[0.5, 0.5, 0.5],
-        EMBEDDING_SIZE=512,  # feature dimension
-        BATCH_SIZE=128,
-        DROP_LAST=True,  # whether drop the last batch to ensure consistent batch_norm statistics
-        LR=0.001,  # initial LR
-        NUM_EPOCH=125,  # total epoch number (use the firt 1/25 epochs to warm up)
-        WEIGHT_DECAY=5e-4,  # do not apply to batch_norm parameters
-        MOMENTUM=0.9,
-        STAGES=[35, 65, 95],  # epoch stages to decay learning rate
+# 训练部分参数
+Cfg.Train = CN()
+Cfg.Train.initial_lr = 0.0002
+Cfg.Train.lr = 0.0002
+Cfg.Train.weight_decay = 0.0005
+Cfg.Train.center_initial_lr = 0.0001
+Cfg.Train.center_lr = 0.0001
+Cfg.Train.epochs = 400
+Cfg.Train.gpu_list = [8, 9]
+Cfg.Train.search_learn_rate = False
+Cfg.Train.train = True
+Cfg.Train.test = False
+Cfg.Train.resume = False
+Cfg.Train.checkpoint = ''
+Cfg.Train.finetune = False
+Cfg.Train.export = False
 
-        DEVICE=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
-        MULTI_GPU=False,
-        # flag to use multiple GPUs; if you choose to train with single GPU,
-        # you should first run "export CUDA_VISILE_DEVICES=device_id" to specify the GPU card you want to use
-        GPU_ID=[0],  # specify your GPU ids
-        PIN_MEMORY=True,
-        NUM_WORKERS=0,
-    ),
-}
+# 网络部分参数
+Cfg.Net = CN()
+Cfg.Net.name = 'MobileFaceNet'
+Cfg.Net.pretrained = True
+Cfg.Net.feature_size = 512
+
+# Loss函数参数
+Cfg.Loss = CN()
+Cfg.Loss.margin = 0.3
+Cfg.Loss.list = ['FocalLoss']
+Cfg.Loss.weight_list = [1.0]
