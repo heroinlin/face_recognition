@@ -6,9 +6,12 @@ from yacs.config import CfgNode as CN
 def get_database(name):
     if name in ['Ms_celeb', 'default']:
         image_root = "/mnt/data/linjian/datasets/MS-Celeb-1M"
+    elif name in ['lfw']:
+        image_root = "/mnt/data/linjian/datasets/lfw"
     else:
         print(f"The database {name} is not exist!")
         exit(-1)
+    return image_root
 
 Cfg = CN()
 
@@ -17,6 +20,7 @@ Cfg.Database = CN()
 Cfg.Database.name = 'default'
 Cfg.Database.image_size = [112, 112]
 Cfg.Database.image_root = get_database(Cfg.Database.name)
+Cfg.Database.val_image_root = get_database(Cfg.Database.name)
 # Cfg.Database.pickle_folder = None
 
 

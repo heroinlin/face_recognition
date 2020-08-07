@@ -15,7 +15,8 @@ from loss import init_loss
 from config import Cfg
 from datasets import init_database
 from utils.avgmeter import AverageMeter
-from utils.eval import accuracy, Evaluation
+from utils.eval import accuracy
+from evaluate import Evaluation, buffer_val
 from utils.logger import Logger
 from utils.random_seed import worker_init_fn
 from utils.combine_conv_bn import fuse_module
@@ -37,7 +38,7 @@ class NetTrain:
         self.backbone_name = backbone_name
         self.head_name = head_name
         self.loss_forward = loss_forward()
-        self.evaluation = Evaluation(val_dataset.data_list, self.batch_inference)
+        self.evaluation = Evaluation(val_dataset, 'lfw',self.batch_inference)
         self.criterions = criterions
         self.loss_weights = loss_weights
         self.optimizer = optimizer
@@ -172,7 +173,8 @@ class NetTrain:
     def eval(self):
         self.backbone.eval()
         self.head.eval()
-        self.evaluation.eval()
+        accuracy, best_thresholds, roc_curve_tensor = self.evaluation.evaluate()
+        buffer_val(self.writer, 'lfw', accuracy, best_thresholds, roc_curve_tensor, self.epoch)
         # self.evaluation.eval_rerank()
 
     def train(self, epoches=10, save_flag=True, finetune=False):
@@ -402,8 +404,7 @@ if __name__ == '__main__':
     os.environ["CUDA_VISIBLE_DEVICES"] = ", ".join([str(gpu_device) for gpu_device in gpu_list])
     use_cuda = torch.cuda.is_available()
     train_dataset = init_database(Cfg.Database.name, Cfg.Database.image_root, Cfg.Database.pickle_folder)
-    val_dataset = init_database(Cfg.Database.name, Cfg.Database.val_image_root, Cfg.Database.val_pickle_folder,
-                                phase="test")
+    val_dataset = Cfg.Database.val_image_root
 
     train_data_loader = data.DataLoader(dataset=train_dataset,
                                         batch_size=Cfg.Sample.batch_size,
