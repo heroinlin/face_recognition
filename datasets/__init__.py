@@ -1,8 +1,10 @@
 from .MS_Celeb_1M import MSCeleb
+from .glintasia import GlintAsia
 
 __data_factory = {
     # image classification models
     'Ms_celeb': MSCeleb,
+    'GlintAsia': GlintAsia,
     'default': MSCeleb,
 }
 

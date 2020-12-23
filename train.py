@@ -23,26 +23,35 @@ from utils.combine_conv_bn import fuse_module
 from utils.separate_bn_paras import apply_weight_decay
 
 
+def loss_forward(criterions, feature, outputs, targets):
+    losses = list()
+    for index, criterion_name in enumerate(criterions.keys()):
+        if criterion_name in ['FocalLoss', 'Softmax']:
+            losses.append(criterions[criterion_name](outputs, targets))
+        else:
+            losses.append(criterions[criterion_name](feature, targets))
+    return losses
+
+
 class NetTrain:
     def __init__(self, backbone, head, train_data_loader, val_dataset,
                  criterions=None,
                  loss_weights=None,
-                 optimizer=None, 
+                 optimizer=None,
                  backbone_name='backbone',
                  head_name='head',
-                 lowest_train_loss=5, 
+                 lowest_train_loss=5,
                  use_cuda=True, gpu_list=None):
         self.train_data_loader = train_data_loader
         self.backbone = backbone
         self.head = head
         self.backbone_name = backbone_name
         self.head_name = head_name
-        self.loss_forward = loss_forward()
+        self.loss_forward = loss_forward
         self.evaluation = Evaluation(val_dataset, 'lfw',self.batch_inference)
         self.criterions = criterions
         self.loss_weights = loss_weights
         self.optimizer = optimizer
-        self.optimizer_center = optimizer_center
         self.lowest_train_loss = lowest_train_loss
         self.use_cuda = use_cuda
         self.gpu_list = gpu_list
@@ -51,16 +60,16 @@ class NetTrain:
         self.epoch = 0
         self.max_epoch = 400
         self.combine_conv_bn_epoch = 150
-        self.weight_cent = weight_cent
         self.init_meter()
 
         if self.criterions is None:
             self.criterions = {'xent': torch.nn.CrossEntropyLoss()}
         if self.loss_weights is None:
-                self.loss_weights = torch.as_tensor([1.0]*len(self.criterions))
+            self.loss_weights = torch.as_tensor([1.0]*len(self.criterions))
         if self.use_cuda:
             self.backbone.cuda()
             self.head.cuda()
+            self.loss_weights = self.loss_weights.cuda()
         if self.gpu_list is None:
             self.gpu_list = range(torch.cuda.device_count())
 
@@ -72,16 +81,18 @@ class NetTrain:
         for index, criterion_name in enumerate(self.criterions.keys()):
             self.loss_meters.append(AverageMeter())
 
-
     def reset_meter(self):
         self.accuracy_top_1.reset()
         self.accuracy_top_5.reset()
         self.total_losses_meter.reset()
         for index, criterion_name in enumerate(self.criterions.keys()):
-            self.loss_meters.reset()
+            self.loss_meters[index].reset()
 
-    def load_checkpoint(self, check_point, finetune=False):
+    def load_checkpoint(self, check_point, finetune=False, pretrained=False):
         check_point = torch.load(check_point)
+        if pretrained:
+            self.backbone.load_state_dict(check_point)
+            return
         if finetune:
             # 导入特征提取部分网络参数
             mapped_state_dict = self.backbone.state_dict()
@@ -204,8 +215,8 @@ class NetTrain:
                 fuse_module(self.head)
             self.train_epoch()
             # scheduler.step()
-            if (self.epoch + 1) % 10 == 0:
-                self.eval()
+            # if (self.epoch + 1) % 10 == 0:
+            #     self.eval()
             if save_flag:
                 self.save_model()
                 self.save_model(False, False)
@@ -244,13 +255,13 @@ class NetTrain:
                 print_infos += 'acc_top1: {:>.4f}, acc_top5: {:>.4f}, total_loss: {:>.4f}( {:>.4f})'.format(
                     self.accuracy_top_1.avg, self.accuracy_top_5.avg,
                     self.total_losses_meter.val, self.total_losses_meter.avg)
-                for index, criterion_name in enumerate(self.criterions.keys()): 
+                for index, criterion_name in enumerate(self.criterions.keys()):
                     print_infos = print_infos + f", {criterion_name}: {self.loss_meter[index].val:>.4f}" \
                                                 f"({self.loss_meter[index].avg:>.4f})"
                 print(print_infos)
                 self.writer.add_scalar('loss/loss', self.total_losses_meter.val, step)
                 self.writer.add_scalar('loss/total_loss', self.total_losses_meter.val, step)
-                for index, criterion_name in enumerate(self.criterions.keys()): 
+                for index, criterion_name in enumerate(self.criterions.keys()):
                     self.writer.add_scalar(f'loss/{criterion_name}', self.loss_meter[index].val,
                                            step)
                 self.writer.add_scalar('acc/acc_top1', self.accuracy_top_1.val, step)
@@ -281,21 +292,26 @@ class NetTrain:
                 print_infos += ' acc_top1: {:>.4f}, acc_top5: {:>.4f}, total_loss: {:>.4f}( {:>.4f})'.format(
                     self.accuracy_top_1.avg, self.accuracy_top_5.avg,
                     self.total_losses_meter.val, self.total_losses_meter.avg)
-                for index, criterion_name in enumerate(self.criterions.keys()): 
-                    print_infos = print_infos + f", {criterion_name}: {self.loss_meter[index].val:>.4f}" \
-                                                f"({self.loss_meter[index].avg:>.4f})"
+                for index, criterion_name in enumerate(self.criterions.keys()):
+                    print_infos = print_infos + f", {criterion_name}: {self.loss_meters[index].val:>.4f}" \
+                                                f"({self.loss_meters[index].avg:>.4f})"
                 print(print_infos)
             if step % 100 == 0:
                 # Window
                 # self.writer.add_image('Image', images, step + self.epoch * train_data_batch)
                 # Linux
                 # self.writer.add_image('Image', image, step + self.epoch * train_data_batch, dataformats='NCHW')
-                for name, param in self.model.named_parameters():
+                for name, param in self.backbone.named_parameters():
                     self.writer.add_histogram(name, param.clone().cpu().data.numpy(),
                                               step + self.epoch * train_data_batch)
+                for name, param in self.head.named_parameters():
+                    self.writer.add_histogram(
+                        name,
+                        param.clone().cpu().data.numpy(),
+                        step + self.epoch * train_data_batch)
                 self.writer.add_scalar('loss/total_loss', self.total_losses_meter.val, step + self.epoch * train_data_batch)
-                for index, criterion_name in enumerate(self.criterions.keys()): 
-                    self.writer.add_scalar(f'loss/{criterion_name}', self.loss_meter[index].val,
+                for index, criterion_name in enumerate(self.criterions.keys()):
+                    self.writer.add_scalar(f'loss/{criterion_name}', self.loss_meters[index].val,
                                            step + self.epoch * train_data_batch)
                 self.writer.add_scalar('acc/acc_top1', self.accuracy_top_1.val, step + self.epoch * train_data_batch)
                 self.writer.add_scalar('acc/acc_top5', self.accuracy_top_5.val, step + self.epoch * train_data_batch)
@@ -333,9 +349,9 @@ class NetTrain:
             features = self.backbone(images)
             return features
         features = self.backbone(images)
-        outputs = self.head(features)
+        outputs = self.head(features, targets.long())
         total_loss = 0
-       
+
         losses = self.loss_forward(self.criterions, features, outputs, targets)
         accuracy_top_1, accuracy_top_5 = accuracy(outputs, targets, (1, 5))
         total_loss = torch.stack(losses).mul(self.loss_weights).sum()
@@ -346,7 +362,7 @@ class NetTrain:
             apply_weight_decay(self.backbone)
             apply_weight_decay(self.head)
             self.optimizer.step()
-        
+
         losses_value = []
         for index, criterion_name in enumerate(self.criterions.keys()):
             losses_value.append(losses[index].item())
@@ -360,14 +376,6 @@ class NetTrain:
         self.accuracy_top_1.update(accuracy_top_1_value, targets.size(0))
         self.accuracy_top_5.update(accuracy_top_5_value, targets.size(0))
         return outputs
-
-def loss_forward(criterions, feature, outputs, targets):
-    losses = list()
-    for index, criterion_name in enumerate(criterions.keys()):
-        if criterion_name in ['FocalLoss', 'Softmax']:
-            losses.append(criterions[criterion_name](outputs, targets))
-        else:
-            losses.append(criterions[criterion_name](feature, targets)) 
 
 
 def parser_args():
@@ -414,10 +422,13 @@ if __name__ == '__main__':
                                         drop_last=True)
     criterions = {}
     for loss_name in Cfg.Loss.list:
-        criterions.update({loss_name, init_loss(loss_name)})
+        criterions.update({loss_name: init_loss(loss_name)})
     loss_weights = torch.as_tensor(Cfg.Loss.weight_list)
     backbone = init_backbone(name=args.backbone_name, input_size=Cfg.Database.image_size )
-    head = init_head(name=args.head_name, )
+    head = init_head(name=args.head_name,
+                     in_features=512,
+                     out_features=512,
+                     device_id=gpu_list)
     if args.finetune:
         base_params = list(map(id, backbone.parameters()))
         classfier_params = list(map(id, head.parameters()))
@@ -430,7 +441,7 @@ if __name__ == '__main__':
                                      amsgrad=True,
                                      weight_decay=Cfg.Train.weight_decay)
     else:
-        optimizer = torch.optim.Adam([{'params': backbone.parameters(), 
+        optimizer = torch.optim.Adam([{'params': backbone.parameters(),
                                        'initial_lr': Cfg.Train.initial_lr},
                                       {'params': head.parameters(),
                                        'initial_lr': Cfg.Train.initial_lr}],
@@ -441,13 +452,16 @@ if __name__ == '__main__':
         #                             lr=Cfg.Train.lr, momentum=0.9, weight_decay=0.0005)
     print(train_dataset.__len__(), train_dataset.class_num())
     fine_tuner = NetTrain(backbone, head, train_data_loader, val_dataset,
-                          criterions=criterions, 
+                          criterions=criterions,
                           loss_weights=loss_weights,
                           optimizer=optimizer,
                           backbone_name=args.backbone_name,
                           head_name=args.head_name,
                           lowest_train_loss=10)
     fine_tuner.max_epoch = Cfg.Train.epochs
+    if args.pretrained:
+        print("loading pretrained model...")
+        fine_tuner.load_checkpoint(args.checkpoint, pretrained=True)
     if args.resume:
         print("continue to train...")
         fine_tuner.load_checkpoint(args.checkpoint, finetune=args.finetune)
