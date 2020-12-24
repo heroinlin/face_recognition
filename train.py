@@ -338,14 +338,12 @@ class NetTrain:
         if self.total_losses_meter.avg < self.lowest_train_loss:
             self.lowest_train_loss = self.total_losses_meter.avg
 
-    def batch_inference(self, images, targets, backward=True):
-        if torch.__version__ < "0.4.0":
-            images = torch.autograd.Variable(images)
-            targets = torch.autograd.Variable(targets)
+    def batch_inference(self, images, targets=None, backward=True):
         if self.use_cuda:
             images = images.cuda()
-            targets = targets.cuda()
-        if not self.backbone.training and not self.head.training:
+            if targets is not None:
+                targets = targets.cuda()
+        if (not self.backbone.training and not self.head.training) or targets is None:
             features = self.backbone(images)
             return features
         features = self.backbone(images)
@@ -416,7 +414,7 @@ if __name__ == '__main__':
 
     train_data_loader = data.DataLoader(dataset=train_dataset,
                                         batch_size=Cfg.Sample.batch_size,
-                                        shuffle=False,
+                                        shuffle=True,
                                         num_workers=Cfg.Sample.num_workers,
                                         worker_init_fn=worker_init_fn,
                                         drop_last=True)
@@ -427,7 +425,7 @@ if __name__ == '__main__':
     backbone = init_backbone(name=args.backbone_name, input_size=Cfg.Database.image_size )
     head = init_head(name=args.head_name,
                      in_features=512,
-                     out_features=512,
+                     out_features=train_dataset.class_num(),
                      device_id=gpu_list)
     if args.finetune:
         base_params = list(map(id, backbone.parameters()))

@@ -7,6 +7,7 @@ import os
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 import torch.utils.data as data
 try:
     from transform import opencv_transforms as cv_transforms
@@ -26,11 +27,18 @@ class GlintAsia(data.Dataset):
         self.data_list = list()
         self.transforms = cv_transforms.Compose([
             cv_transforms.RandomRotation(30),
-            cv_transforms.ColorJitter(brightness=0.2, contrast=0.15, saturation=0, hue=0),
+            cv_transforms.RandomResizedCrop(112, (0.8, 1.0)),
+            cv_transforms.ColorJitter(brightness=0.2,
+                                      contrast=0.15,
+                                      saturation=0.1,
+                                      hue=0),
+            cv_transforms.RandomHorizontalFlip(),
+            # cv_transforms.RandomGrayscale(),
             cv_transforms.ToTensor(),
             cv_transforms.ColorAugmentation(),
             cv_transforms.RandomErasing(sl=0.02, sh=0.2),
-            cv_transforms.Normalize([0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
+            cv_transforms.Normalize([0.4914, 0.4822, 0.4465],
+                                    [0.247, 0.243, 0.261])
         ])
         self._prepare(self.image_root, direction=0)
         self.person_id2label = {idx: label + self.cur_id for label, idx in enumerate(self.person_id_container)}
@@ -42,7 +50,8 @@ class GlintAsia(data.Dataset):
         return len(self.person_id_container)
 
     def _prepare(self, image_dir, direction=0):
-        for image_path in sorted(glob.glob(image_dir + "/*/*.jpg")):
+        print(f"Loading {self.database_name} images...")
+        for image_path in tqdm(glob.glob(image_dir + "/*/*.jpg")):
             person_id = os.path.basename(os.path.dirname(image_path))
             person_id = person_id.split('_')[-1]
             if int(person_id) == -1:

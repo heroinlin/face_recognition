@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import io
 import pickle
 import sys
 sys.path.append(r'/home/heroin/workspace/envs/bcolz')
@@ -208,7 +209,7 @@ class Evaluation(object):
         tpr, fpr, accuracy, best_thresholds = evaluate(self.embeddings, self.actual_issame)
         buf = gen_plot(fpr, tpr)
         roc_curve = Image.open(buf)
-        roc_curve_tensor = torch.as_tensor(roc_curve/255.0)
+        roc_curve_tensor = trans.ToTensor()(roc_curve)
         return accuracy.mean(), best_thresholds.mean(), roc_curve_tensor
 
 def buffer_val(writer, db_name, acc, best_threshold, roc_curve_tensor, epoch):
@@ -224,7 +225,12 @@ def gen_plot(fpr, tpr):
     plt.ylabel("TPR", fontsize=14)
     plt.title("ROC Curve", fontsize=14)
     plot = plt.plot(fpr, tpr, linewidth=2)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    buf.seek(0)
+    plt.close()
     # plt.show()
+    return buf
 
 
 
@@ -246,6 +252,7 @@ def generate_data():
 
 
 if __name__ == '__main__':
+    # generate_data()
     root = r"/mnt/data/datasets"
     data_name = r"lfw"
     root_working = os.path.split(os.path.realpath(__file__))[0]

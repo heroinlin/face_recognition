@@ -7,8 +7,8 @@ workroot = os.path.split(os.path.realpath(__file__))[0]
 def get_database(name):
     if name in ['Ms_celeb', 'default']:
         image_root = "/home/heroin/datasets/MS-Celeb-1M"
-    elif name in ['lfw']:
-        image_root = "/home/heroin/datasets/lfw"
+    elif name in ['val']:
+        image_root = "/home/heroin/datasets"
     elif name in ['GlintAsia']:
         image_root = "/home/heroin/datasets/faces_glintasia_images_debug"
     else:
@@ -21,9 +21,10 @@ Cfg = CN()
 # 数据部分参数
 Cfg.Database = CN()
 Cfg.Database.name = 'GlintAsia'
+Cfg.Database.val_name = 'val'
 Cfg.Database.image_size = [112, 112]
 Cfg.Database.image_root = get_database(Cfg.Database.name)
-Cfg.Database.val_image_root = get_database(Cfg.Database.name)
+Cfg.Database.val_image_root = get_database(Cfg.Database.val_name)
 Cfg.Database.pickle_folder = None
 
 
