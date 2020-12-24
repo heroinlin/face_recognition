@@ -82,10 +82,10 @@ class ArcFace(nn.Module):
 
         self.s = s
         self.m = m
-        
+
         self.weight = Parameter(torch.FloatTensor(out_features, in_features))
         nn.init.xavier_uniform_(self.weight)
-      
+
         self.easy_margin = easy_margin
         self.cos_m = math.cos(m)
         self.sin_m = math.sin(m)
@@ -105,7 +105,7 @@ class ArcFace(nn.Module):
             for i in range(1, len(self.device_id)):
                 temp_x = x.cuda(self.device_id[i])
                 weight = sub_weights[i].cuda(self.device_id[i])
-                cosine = torch.cat((cosine, F.linear(F.normalize(temp_x), F.normalize(weight)).cuda(self.device_id[0])), dim=1) 
+                cosine = torch.cat((cosine, F.linear(F.normalize(temp_x), F.normalize(weight)).cuda(self.device_id[0])), dim=1)
         sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
         phi = cosine * self.cos_m - sine * self.sin_m
         if self.easy_margin:
@@ -116,6 +116,7 @@ class ArcFace(nn.Module):
         one_hot = torch.zeros(cosine.size())
         if self.device_id != None:
             one_hot = one_hot.cuda(self.device_id[0])
+            label = label.cuda(self.device_id[0])
         one_hot.scatter_(1, label.view(-1, 1).long(), 1)
         # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
@@ -165,6 +166,7 @@ class CosFace(nn.Module):
         one_hot = torch.zeros(cosine.size())
         if self.device_id != None:
             one_hot = one_hot.cuda(self.device_id[0])
+            label = label.cuda(self.device_id[0])
         # one_hot = one_hot.cuda() if cosine.is_cuda else one_hot
         one_hot.scatter_(1, label.view(-1, 1).long(), 1)
         # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
@@ -245,6 +247,7 @@ class SphereFace(nn.Module):
         one_hot = torch.zeros(cos_theta.size())
         if self.device_id != None:
             one_hot = one_hot.cuda(self.device_id[0])
+            label = label.cuda(self.device_id[0])
         one_hot.scatter_(1, label.view(-1, 1), 1)
 
         # --------------------------- Calculate output ---------------------------
@@ -287,7 +290,7 @@ class Am_softmax(nn.Module):
 
         self.kernel = Parameter(torch.Tensor(in_features, out_features))
         self.kernel.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)  # initialize kernel
- 
+
     def forward(self, embbedings, label):
         if self.device_id == None:
             kernel_norm = l2_norm(self.kernel, axis = 0)

@@ -66,12 +66,12 @@ class NetTrain:
             self.criterions = {'xent': torch.nn.CrossEntropyLoss()}
         if self.loss_weights is None:
             self.loss_weights = torch.as_tensor([1.0]*len(self.criterions))
+        if self.gpu_list is None:
+            self.gpu_list = range(torch.cuda.device_count())
         if self.use_cuda:
             self.backbone.cuda()
             self.head.cuda()
             self.loss_weights = self.loss_weights.cuda()
-        if self.gpu_list is None:
-            self.gpu_list = range(torch.cuda.device_count())
 
     def init_meter(self):
         self.accuracy_top_1 = AverageMeter()
@@ -457,7 +457,8 @@ if __name__ == '__main__':
                           optimizer=optimizer,
                           backbone_name=args.backbone_name,
                           head_name=args.head_name,
-                          lowest_train_loss=10)
+                          lowest_train_loss=10,
+                          gpu_list=gpu_list)
     fine_tuner.max_epoch = Cfg.Train.epochs
     if args.pretrained:
         print("loading pretrained model...")
