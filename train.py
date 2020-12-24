@@ -215,8 +215,8 @@ class NetTrain:
                 fuse_module(self.head)
             self.train_epoch()
             # scheduler.step()
-            # if (self.epoch + 1) % 10 == 0:
-            #     self.eval()
+            if (self.epoch + 1) % 10 == 0:
+                self.eval()
             if save_flag:
                 self.save_model()
                 self.save_model(False, False)
