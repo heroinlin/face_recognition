@@ -51,27 +51,22 @@ class GlintAsia(data.Dataset):
 
     def _prepare(self, image_dir, direction=0):
         print(f"Loading {self.database_name} images...")
-        for image_path in tqdm(glob.glob(image_dir + "/*/*.jpg")):
-            person_id = os.path.basename(os.path.dirname(image_path))
-            person_id = person_id.split('_')[-1]
+        self.data_list = glob.glob(image_dir + "/*/*.jpg")
+        for person_id_folder in tqdm(os.listdir(image_dir)):
+            person_id = person_id_folder.split('_')[-1]
             if int(person_id) == -1:
                 continue  # junk images are just ignored
             assert 0 <= int(person_id) <= 200000
             person_id = '_'.join([self.database_name, person_id])
             if person_id not in self.person_id_container:
                 self.person_id_container.append(person_id)
-            data_dict = {
-                "image_path": image_path,
-                "person_id": person_id,
-                "direction": direction,  # 标记数据用于训练还是测试的gallery或query
-                "database_name": self.database_name
-            }
-            self.data_list.append(data_dict)
 
     def __getitem__(self, index):
         data_index = self.data_list[index]
-        image_path = data_index['image_path']
-        person_id = data_index['person_id']
+        image_path = data_index
+        person_id = os.path.basename(os.path.dirname(image_path))
+        person_id = person_id.split('_')[-1]
+        person_id = '_'.join([self.database_name, person_id])
         img = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8()), 1)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, dsize=(112, 112))
